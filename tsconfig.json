@@ -22,6 +22,7 @@
     "kernel",
     "protocol",
     "sim",
+    "dashboard",
     "examples/recipes"
   ]
 }

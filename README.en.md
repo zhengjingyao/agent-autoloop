@@ -106,6 +106,15 @@ External events work the same way once the source is connected. To hand new GitH
 
 Changes take effect within seconds of saving. Run `agent-autoloop check` to validate, `agent-autoloop check <file>` to validate a draft without touching the running hub, `agent-autoloop rules explain [file]` to see the rules in effect and their next runs (a draft file too), and `agent-autoloop emit <type> --dry-run` to preview who an event would go to (it doesn't contact the hub or write to the log). If you make a mistake, or the file is deleted or can't be read, the hub keeps running the previous valid rules and sends you a card about it.
 
+### Local dashboard (this branch)
+
+This branch ships a client on equal footing with the CLI: once `up` is running, open <http://127.0.0.1:3351> to see online workers, rules and their next runs, recent rounds, cards waiting on you, tokens and cost. You can pause, resume or run a rule now, answer a card, and **add a task** from a form.
+
+- Port 3351 by default; change `dashboard.port` in `config.json`, or run `agent-autoloop ui --port 3351` on its own.
+- It only reads `/v1/state` and forwards `/v1/stream`. The owner key stays on the server and never reaches the browser; the server binds loopback only.
+- Adding a task appends a rule to `rules.json`: the whole file is validated with the same `parseRules` as `agent-autoloop check` before an atomic write. A rejected task leaves the file byte for byte unchanged.
+- It is a separate process, so failing to start cannot take the hub down. The kernel, `host`, `protocol` and `worker` boundaries are unchanged: the hub still has no interface of its own.
+
 ### How agents talk back to the hub
 
 The hub asks only one thing of an agent: **put your result in your final message**. When the job is done, a one-line conclusion is enough. To ask you something, the agent appends an `agent-autoloop` block:

@@ -13,7 +13,7 @@ description: 配置 Agent 自动化中台：加规则、接新的事件插件、
 
 续接会话也只算这次新增的用量。`~/.agent-autoloop/worker/usage/` 存着相减要用的累计值，没有记录的续接（比如删了这个目录）这次不报 Codex 的 Token 和 Claude Code 的费用，下一次恢复正常。本人打开链接在同一个会话里接着聊用掉的量，会算进下一次续接。旧回执不重算。
 
-这里没有网页。用户想要一个页面看全局，就替他写一个：读 `GET /v1/state`，密钥是 `config.json` 的 `owner`，要跟着变化就从状态里的 `seq` 接 `GET /v1/stream?after=<seq>`，请求见 `docs/protocol.md` 的「本人」一节。
+中台自己没有网页；本分支自带一个本地页面，随 `up` 起在 3351 端口（或单独运行 `agent-autoloop ui`），用户想看全局就让他打开那个地址，页面上也能新增任务。要另写一个客户端时：读 `GET /v1/state`，密钥是 `config.json` 的 `owner`，要跟着变化就从状态里的 `seq` 接 `GET /v1/stream?after=<seq>`，请求见 `docs/protocol.md` 的「本人」一节。
 
 ## 改规则
 

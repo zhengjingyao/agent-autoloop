@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent 自动化中台</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f9; --card: #fff; --line: #e3e6ea; --text: #1c2128; --muted: #6b7280;
+  --accent: #2563eb; --ok: #15803d; --warn: #b45309; --bad: #b91c1c; --soft: #f1f3f6;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171b; --card: #1d2127; --line: #30363f; --text: #e6e9ee; --muted: #98a1ad;
+          --accent: #6d9cff; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --soft: #262b33; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; padding: 24px max(16px, calc((100vw - 1080px) / 2)) 64px;
+       background: var(--bg); color: var(--text);
+       font: 15px/1.6 system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; }
+h1 { font-size: 1.35rem; margin: 0; }
+h2 { font-size: 1.02rem; margin: 0 0 12px; }
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+header .spacer { flex: 1; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+.dot.on { background: var(--ok); } .dot.off { background: var(--muted); }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; border: 1px solid var(--line); background: var(--card); color: var(--text);
+         border-radius: 8px; padding: 6px 12px; min-height: 34px; }
+button:hover { border-color: var(--accent); }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+input, select, textarea { width: 100%; padding: 7px 10px; border: 1px solid var(--line);
+                          border-radius: 8px; background: var(--card); color: var(--text); }
+textarea { min-height: 88px; resize: vertical; }
+label { display: block; font-size: .87rem; color: var(--muted); margin: 12px 0 4px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.stat b { display: block; font-size: 1.5rem; line-height: 1.25; }
+.stat span { color: var(--muted); font-size: .83rem; }
+section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+          padding: 16px; margin-bottom: 16px; }
+section > header { margin-bottom: 12px; }
+section > header h2 { margin: 0; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+td.wrap { overflow-wrap: anywhere; }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 999px; background: var(--soft);
+       font-size: .78rem; white-space: nowrap; }
+.tag.ok { color: var(--ok); } .tag.warn { color: var(--warn); } .tag.bad { color: var(--bad); }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.actions button { padding: 3px 9px; min-height: 28px; font-size: .82rem; }
+.empty { color: var(--muted); padding: 8px 0; }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+.card strong { display: block; margin-bottom: 4px; }
+.card p { margin: 0 0 10px; white-space: pre-wrap; color: var(--muted); }
+.hint { color: var(--muted); font-size: .83rem; }
+.error { color: var(--bad); white-space: pre-wrap; margin-top: 10px; }
+.ok-msg { color: var(--ok); margin-top: 10px; }
+dialog { width: min(560px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: 14px;
+         background: var(--card); color: var(--text); padding: 20px; }
+dialog::backdrop { background: rgba(0,0,0,.45); }
+dialog h2 { font-size: 1.1rem; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > * { flex: 1; }
+.preset { flex: 0 0 auto; font-size: .8rem; padding: 3px 8px; min-height: 28px; }
+footer { color: var(--muted); font-size: .82rem; margin-top: 20px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Agent 自动化中台</h1>
+  <span id="live" class="hint"><span class="dot off"></span>连接中…</span>
+  <span class="spacer"></span>
+  <span id="updated" class="hint"></span>
+  <button id="reload">刷新</button>
+</header>
+
+<div class="grid" id="stats"></div>
+
+<section>
+  <header><h2>等你拍板</h2></header>
+  <div id="cards"><div class="empty">加载中…</div></div>
+</section>
+
+<section>
+  <header>
+    <h2>规则</h2>
+    <span class="spacer"></span>
+    <button class="primary" id="new-task">+ 新增任务</button>
+  </header>
+  <div id="rules"><div class="empty">加载中…</div></div>
+</section>
+
+<section>
+  <header><h2>最近轮次</h2></header>
+  <div id="runs"><div class="empty">加载中…</div></div>
+</section>
+
+<section>
+  <header><h2>谁在线</h2></header>
+  <div id="presence"></div>
+</section>
+
+<footer>数据来自本机中台的 /v1/state，新增任务写入 rules.json 后几秒内生效。密钥只留在这台电脑上。</footer>
+
+<dialog id="task-dialog">
+  <h2>新增任务</h2>
+  <p class="hint">填好后先整份校验 rules.json，通过才写入；写错了不会动正在跑的规则。</p>
+  <form id="task-form">
+    <label for="f-name">规则名</label>
+    <input id="f-name" name="name" required placeholder="例如：每日早报">
+
+    <label for="f-kind">什么时候触发</label>
+    <select id="f-kind" name="kind">
+      <option value="cron">定时</option>
+      <option value="event">收到事件</option>
+    </select>
+
+    <div id="cron-box">
+      <label for="f-cron">定时（cron，五段，按本机时区）</label>
+      <input id="f-cron" name="cron" value="0 9 * * *" placeholder="0 9 * * *">
+      <div class="row" style="margin-top:6px">
+        <button type="button" class="preset" data-cron="0 9 * * *">每天 9 点</button>
+        <button type="button" class="preset" data-cron="*/5 * * * *">每 5 分钟</button>
+        <button type="button" class="preset" data-cron="0 * * * *">每小时</button>
+        <button type="button" class="preset" data-cron="0 18 * * 0">周日 18 点</button>
+      </div>
+    </div>
+
+    <div id="event-box" hidden>
+      <label for="f-source">事件来源（rules.json 里已登记的）</label>
+      <select id="f-source" name="source"></select>
+      <label for="f-types">事件类型（逗号分隔，可用 x.* 或 *）</label>
+      <input id="f-types" name="types" placeholder="issues.opened">
+    </div>
+
+    <label for="f-to">交给谁（已登记的 Agent）</label>
+    <select id="f-to" name="to"></select>
+
+    <label for="f-cwd">在哪个目录干（绝对路径）</label>
+    <input id="f-cwd" name="cwd" required placeholder="~/code/app">
+
+    <label for="f-prompt">要它做什么</label>
+    <textarea id="f-prompt" name="prompt" placeholder="写清楚这件事怎么算做完"></textarea>
+
+    <label for="f-tell">什么时候通知你</label>
+    <select id="f-tell" name="tell">
+      <option value="needed">只在要拍板或出结果时</option>
+      <option value="always">每轮都通知</option>
+      <option value="never">不通知</option>
+    </select>
+
+    <div id="task-result" class="error"></div>
+    <div class="row" style="margin-top:18px">
+      <button type="button" id="task-cancel">取消</button>
+      <button type="submit" class="primary">校验并保存</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+// Every word from the hub is data: it goes through esc() before it ever becomes markup.
+const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const $ = (id) => document.getElementById(id);
+const when = (iso) => {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? esc(iso) : d.toLocaleString("zh-CN", { hour12: false });
+};
+const money = (n) => (typeof n === "number" && n ? `¥${n.toFixed(2)}` : "—");
+const tokens = (n) => (typeof n === "number" ? n.toLocaleString("zh-CN") : "—");
+
+let seq = 0;
+let source = null;
+let rawRules = { agents: {}, sources: {} };
+
+async function api(path, options) {
+  const answer = await fetch(path, options);
+  const body = await answer.json().catch(() => ({}));
+  if (!answer.ok) throw new Error(body.error || `请求失败（${answer.status}）`);
+  return body;
+}
+
+function stat(label, value) {
+  return `<div class="stat"><b>${esc(value)}</b><span>${esc(label)}</span></div>`;
+}
+
+function render(state) {
+  seq = state.seq ?? seq;
+  $("updated").textContent = `更新于 ${new Date().toLocaleTimeString("zh-CN", { hour12: false })}`;
+  const t = state.totals || {}, today = (state.spending || {}).today || {}, week = (state.spending || {}).week || {};
+  $("stats").innerHTML = [
+    stat("正在跑", t.running ?? 0),
+    stat("排队中", t.queued ?? 0),
+    stat("等你拍板", t.attention ?? (state.cards || []).length),
+    stat("今天跑完", t.doneToday ?? 0),
+    stat("今天 Token", tokens(today.tokens)),
+    stat("今天费用", money(today.cost)),
+    stat("近 7 天轮次", week.rounds ?? 0),
+  ].join("");
+
+  const cards = state.cards || [];
+  $("cards").innerHTML = cards.length ? cards.map((c) => {
+    const buttons = (c.options || []).map((o, i) =>
+      `<button data-card="${esc(c.id)}" data-choice="${i}">${esc(o)}</button>`).join("");
+    const resolve = `<button data-card="${esc(c.id)}" data-resolve="1">已处理</button>`;
+    return `<div class="card"><strong>${esc(c.title)}</strong><p>${esc(c.text)}</p>
+      <div class="actions">${buttons}${resolve}</div></div>`;
+  }).join("") : `<div class="empty">没有等你拍板的事。</div>`;
+
+  const lines = state.lines || [];
+  $("rules").innerHTML = lines.length ? `<table><thead><tr>
+      <th>名称</th><th>触发</th><th>交给</th><th>下次</th><th>状态</th><th>操作</th>
+    </tr></thead><tbody>${lines.map((r) => {
+      const paused = r.paused ? `<span class="tag warn">已暂停</span>` : `<span class="tag ok">运行中</span>`;
+      const trigger = r.every ? esc(r.every) : `${esc(r.source)} · ${esc((r.types || []).join("、"))}`;
+      const name = encodeURIComponent(r.name);
+      const toggle = r.paused
+        ? `<button data-rule="${esc(name)}" data-act="resume">恢复</button>`
+        : `<button data-rule="${esc(name)}" data-act="pause">暂停</button>`;
+      return `<tr><td class="wrap"><strong>${esc(r.name)}</strong></td><td>${trigger}</td>
+        <td>${esc(r.agent)}</td><td>${when(r.next)}</td><td>${paused}</td>
+        <td><div class="actions">${toggle}<button data-rule="${esc(name)}" data-act="run">立即运行</button></div></td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="empty">还没有规则，点右上角「新增任务」加一条。</div>`;
+
+  const runs = state.runs || [];
+  $("runs").innerHTML = runs.length ? `<table><thead><tr>
+      <th>编号</th><th>规则</th><th>状态</th><th>结果</th><th>结束</th><th></th>
+    </tr></thead><tbody>${runs.map((r) => {
+      const tag = { done: "ok", claimed: "warn", queued: "", unknown: "bad", nothing: "" }[r.state] || "bad";
+      const text = r.error ? `<span class="tag bad">${esc(r.error)}</span>` : esc(r.summary || "—");
+      return `<tr><td>#${esc(r.id)}</td><td>${esc(r.rule)}</td>
+        <td><span class="tag ${tag}">${esc(r.state)}</span></td><td class="wrap">${text}</td>
+        <td>${when(r.finishedAt)}</td>
+        <td><button data-why="${esc(r.id)}">来龙去脉</button></td></tr>`;
+    }).join("")}</tbody></table>` : `<div class="empty">还没有跑过。</div>`;
+
+  const presence = [...(state.agents || []).map((a) => ({ ...a, kind: "接单电脑" })),
+                    ...(state.channels || []).map((c) => ({ ...c, kind: "通道" }))];
+  $("presence").innerHTML = presence.length ? presence.map((p) =>
+    `<span class="tag ${p.online ? "ok" : ""}" style="margin:0 8px 8px 0;display:inline-block;padding:4px 10px">
+      <span class="dot ${p.online ? "on" : "off"}"></span>${esc(p.kind)}：${esc(p.name)}</span>`).join("")
+    : `<div class="empty">没有登记。</div>`;
+}
+
+async function refresh() {
+  try {
+    render(await api("/api/state"));
+    $("live").innerHTML = `<span class="dot on"></span>已连上`;
+    return true;
+  } catch (error) {
+    $("live").innerHTML = `<span class="dot off"></span>${esc(error.message)}`;
+    return false;
+  }
+}
+
+async function connectStream() {
+  source?.close();
+  source = new EventSource("/api/stream?after=" + seq);
+  source.onmessage = () => { refresh(); };
+  source.onerror = () => { $("live").innerHTML = `<span class="dot off"></span>实时断开，改用定时刷新`; };
+}
+
+async function loadChoices() {
+  try {
+    rawRules = await api("/api/rules.json");
+    const agents = Object.entries(rawRules.agents || {}).map(([id, a]) =>
+      `<option value="${esc(id)}">${esc(a.name || id)}（${esc(id)}）</option>`).join("");
+    const sources = Object.entries(rawRules.sources || {}).map(([id, s]) =>
+      `<option value="${esc(id)}">${esc(s.name || id)}（${esc(id)}）</option>`).join("");
+    $("f-to").innerHTML = agents || `<option value="">（rules.json 里还没有 Agent）</option>`;
+    $("f-source").innerHTML = sources || `<option value="">（rules.json 里还没有来源）</option>`;
+  } catch (error) {
+    $("task-result").textContent = error.message;
+  }
+}
+
+$("reload").onclick = async () => { await refresh(); await connectStream(); };
+$("f-kind").onchange = () => {
+  const cron = $("f-kind").value === "cron";
+  $("cron-box").hidden = !cron;
+  $("event-box").hidden = cron;
+};
+document.querySelectorAll("button[data-cron]").forEach((b) => {
+  b.onclick = () => { $("f-cron").value = b.dataset.cron; };
+});
+
+const dialog = $("task-dialog");
+$("new-task").onclick = () => { loadChoices(); $("task-result").textContent = ""; dialog.showModal(); };
+$("task-cancel").onclick = () => dialog.close();
+
+$("task-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const f = $("task-form").elements;
+  const isCron = $("f-kind").value === "cron";
+  const rule = {
+    name: f.name.value.trim(),
+    when: isCron
+      ? { cron: f.cron.value.trim() }
+      : { source: f.source.value, types: f.types.value.split(",").map((s) => s.trim()).filter(Boolean) },
+    to: f.to.value,
+    cwd: f.cwd.value.trim(),
+    prompt: f.prompt.value.trim(),
+    tell: f.tell.value,
+  };
+  const out = $("task-result");
+  out.className = "error";
+  out.textContent = "正在校验…";
+  try {
+    await api("/api/rules", {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(rule),
+    });
+    out.className = "ok-msg";
+    out.textContent = "已写入 rules.json，几秒内生效。";
+    setTimeout(() => dialog.close(), 900);
+    await refresh();
+  } catch (error) {
+    out.textContent = error.message;
+  }
+};
+
+document.body.onclick = async (event) => {
+  const b = event.target.closest("button");
+  if (!b) return;
+  try {
+    if (b.dataset.act) {
+      await api(`/api/rules/${b.dataset.rule}/${b.dataset.act}`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: "{}",
+      });
+      await refresh();
+    } else if (b.dataset.choice !== undefined) {
+      await api(`/api/cards/${b.dataset.card}/answer`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ choice: Number(b.dataset.choice) }),
+      });
+      await refresh();
+    } else if (b.dataset.resolve) {
+      await api(`/api/cards/${b.dataset.card}/resolve`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reason: "在页面上点了已处理" }),
+      });
+      await refresh();
+    } else if (b.dataset.why) {
+      const facts = await api(`/api/runs/${b.dataset.why}/why`);
+      window.alert((Array.isArray(facts) ? facts : []).map((x) => `${x.type}: ${JSON.stringify(x.args ?? x)}`).join("\n\n") || "没有记录");
+    }
+  } catch (error) {
+    window.alert(error.message);
+  }
+};
+
+await refresh();
+await connectStream();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
