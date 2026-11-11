@@ -30,7 +30,8 @@ description: 配置 Agent 自动化中台：加规则、接新的事件插件、
 - 对话这类要马上回的活，不想排在批量的长任务后面：把批量的规则都写进同一个 `group`，`parallel` 写得比 `worker.capacity` 小，留下的名额长任务占不了，对话来了直接领。比如 `capacity` 是 4，批量那组写 `"group": "batch", "parallel": 3`。同一组的规则 `parallel` 写成一样的。
 - 同组一共并行三轮，但单条规则每次只跑一轮时，在规则里加 `"maxActive": 1`。每个对象仍单独排队。在 `agents` 里也可以给单个 Agent 加 `maxActive`，限制它跨规则同时跑几轮。
 - 同一个对象的新事件要接着上一轮的会话（比如同一个对话的后续消息），就写 `"resume": true`；默认每次开新会话。上一轮被停掉、可能还在跑或者换了 Agent 时开新的。不写 `parallel` 时整条规则的事件都接同一个会话。
-- 要停一条规则，用 `agent-autoloop pause <规则> --reason …`（到点自动恢复加 `--until`），恢复用 `resume <规则>`，现在就跑一轮用 `run <规则>`；不用为了停规则去改 `rules.json`。
+- 一个事项一轮开一个会话、客户端里的会话名字都一样分不清时，给规则写 `"title": "tapd-{id}-测试"`：它单独占提示词第一行，`{subject}` 换成事件的对象，`{id}` 换成对象按 `/ # :` 分开的最后一段。要是字母或数字开头、不含空白的一个词。
+- 要停一条规则，用 `agent-autoloop pause <规则> --reason …`（到点自动恢复加 `--until`），恢复用 `resume <规则>`，现在就跑一轮用 `run <规则>`；不用为了停规则去改 `rules.json`。暂停期间来的事件这条规则不接、也不排队；`resume` 会列出这次暂停跳过的事件，有就如实告诉用户；用户说要补，再运行它给出的 `agent-autoloop replay <规则> --since <时间>`，一次补完、每条只补一次，不用 `run` 一条条补。
 - 改规则前可以先写成草稿，用 `agent-autoloop check <草稿>` 校验，不影响正在跑的中台。
 - 默认的先问清单是 `askFirst`，用户说什么事必须先问他，就改这里。
 - 用户在别的地方定时跑的任务（Claude、Codex 应用里），写进 `elsewhere`，只在 `agent-autoloop status` 里列出来；它们要找用户时运行 `agent-autoloop tell <编号> --task <任务名>`，内容从标准输入传。要用户拍板的，给这个任务写上 `cwd` 和 `skill` 或 `prompt`，任务里运行 `agent-autoloop ask --task <任务名>`，标准输入传回执那样的 `ask`：卡片带选项，用户点了，中台叫醒它的 Agent 在 `cwd` 照 `skill`、`prompt` 接着做，回答在这一轮资料文件的 `answers` 里。
@@ -80,6 +81,8 @@ Windows 的 `cwd` 可写 `C:/code/project`、JSON 转义后的 `C:\\code\\projec
 ACP 用 `use: "acp"` 和 `command: ["ACP 服务程序"]`，比如 Gemini CLI 是 `["gemini", "--acp"]`、OpenCode 是 `["opencode", "acp"]`，支持 v1 的会话新建、恢复、文字与一次性权限请求；先在该 Agent 自己的 CLI 登录。`access` 只管 Agent 主动来问的操作，规范允许它不询问就执行，要限制得用它自己的模式（比如 `command` 里写 `env INITIAL_AGENT_MODE=read-only …`）；`model`、`effort`、`tier` 不生效，要在 Agent 自己那边设置。普通命令接法与实测支持范围见 README。
 
 DeepSeek Harness 用 `use: "dsh"`，要 0.2.2 或更新（`npm install -g @deepseek-ai/dsh@next --allow-scripts=koffi,node-pty,@deepseek-ai/dsh-subprocess-local`，不放行这三个包的安装脚本，装完一跑就出错），能续接原会话、上报 Token（不报费用），报 `MISSING_CREDENTIAL` 时把密钥放进环境变量，`access` 对应它的权限档位；旧版用 README 里的普通命令接法。没有可打开的桌面链接。
+
+ZCode 用 `use: "zcode"`，跑随桌面版装的 CLI；Windows 上 `"program"` 指向它的 `zcode.cjs`，插件用 node 启动。能续接原会话、上报 Token（不报费用），`access` 对应它的模式（`read` 是 `plan`，`edit` 是 `edit`，`full` 是 `yolo`）；`model`、`effort` 用 ZCode 自己的设置。先跑一次 `zcode -p "hi"`，返回空就在 ZCode 里换一个能用的模型提供方。没有可打开的桌面链接。
 
 Claude 主任务要委托 Codex 操作网页时，从 `examples/recipes/browser-handoff/` 配置已验收的入口、目标与允许操作，保留返回的 Codex 子会话编号；受阻由主任务交 `ask`，恢复后只续办网页步骤。入口调用模板不提供浏览器连接，也不修改桌面应用或授权。
 

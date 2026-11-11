@@ -37,6 +37,7 @@ const claude: Adapter = (await import("../plugins/claude/agent.ts")).default;
 const codex: Adapter = (await import("../plugins/codex/agent.ts")).default;
 const command: Adapter = (await import("../plugins/command/agent.ts")).default;
 const dsh: Adapter = (await import("../plugins/dsh/agent.ts")).default;
+const zcode: Adapter = (await import("../plugins/zcode/agent.ts")).default;
 
 const turn = {
   prompt: "做这件事",
@@ -62,7 +63,7 @@ const stubbed = (adapter: Adapter, t: object) => {
 };
 
 test("a built-in agent starts the program its rules name, with its own arguments after it", () => {
-  for (const adapter of [claude, codex, dsh]) {
+  for (const adapter of [claude, codex, dsh, zcode]) {
     const argv = adapter.command({ ...turn, program: "/opt/bin/via-gateway" });
     assert.equal(argv[0], "/opt/bin/via-gateway");
     assert.ok(argv.includes("做这件事") || argv.some((part) => part.includes("做这件事")), "the prompt still goes in");
@@ -391,7 +392,7 @@ test("a program that isn't there says so", () => {
 
 test("a line of output that's JSON but no message is noise to every plugin", () => {
   const noise = 'null\n42\n"words"\n[]\n';
-  for (const adapter of [claude, codex, command, dsh]) {
+  for (const adapter of [claude, codex, command, dsh, zcode]) {
     assert.doesNotThrow(() => adapter.read(noise, null, ""));
     assert.doesNotThrow(() => adapter.read(noise, 0, ""));
   }
