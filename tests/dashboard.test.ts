@@ -1,14 +1,17 @@
 // Failure modes: the page or an API answer leaks the owner's key; a client reads state unauthenticated; a new task
 // silently replaces the rules file, writes an invalid rule, overwrites an existing name, or is accepted with a typo'd
-// field; a rejected new task still touches the file; the stream is not forwarded as SSE; the page binds a public address.
+// field; a rejected new task still touches the file; the stream is not forwarded as SSE; the page binds a public address;
+// the page's script fails to parse (a top-level await), leaving every section stuck on the skeleton while HTTP tests pass.
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { runInNewContext, Script } from "node:vm";
 import { after, before, test } from "node:test";
 import { setup } from "./helpers.ts";
 
 const home = setup("dashboard");
+const PAGE = join(import.meta.dirname, "..", "dashboard", "public", "index.html");
 // The fixture is shared with other test files: keep the file this test rewrites inside its own temporary home.
 process.env.AGENT_AUTOLOOP_RULES = join(home, "rules.json");
 const { parseRules } = await import("../protocol/rules.ts");
@@ -123,6 +126,55 @@ test("a rejected new task leaves the rules file byte for byte unchanged", async 
     assert.equal(answer.status, 400, JSON.stringify(rule));
     assert.equal(readFileSync(RULES_FILE, "utf8"), before, JSON.stringify(rule));
   }
+});
+
+test("the page's script parses: a top-level await would leave every section stuck on the skeleton", () => {
+  const page = readFileSync(PAGE, "utf8");
+  const script = /<script[^>]*>([\s\S]*?)<\/script>/.exec(page)?.[1] ?? "";
+  assert.ok(script.length > 0, "页面里的脚本没找到");
+  assert.doesNotThrow(() => new Script(script), "页面脚本解析失败，整页会停在骨架上");
+});
+
+test("the page boots: its script really reads state and fills the panels", async () => {
+  const script = /<script[^>]*>([\s\S]*?)<\/script>/.exec(readFileSync(PAGE, "utf8"))![1];
+  const calls: string[] = [];
+  const nodes = new Map<string, Record<string, unknown>>();
+  const node = (id: string) => {
+    let found = nodes.get(id);
+    if (!found) {
+      found = { innerHTML: "", textContent: "", hidden: false, value: "", showModal() {}, close() {} };
+      nodes.set(id, found);
+    }
+    return found;
+  };
+  const state = {
+    seq: 4,
+    totals: { running: 1, queued: 0, attention: 0, doneToday: 3 },
+    spending: { today: { tokens: 120, cost: 0.5 }, week: { rounds: 9 } },
+    cards: [],
+    lines: [],
+    runs: [],
+    agents: [],
+    channels: [],
+  };
+  const sandbox = {
+    document: { getElementById: node, querySelectorAll: () => [], body: {} },
+    window: { alert() {} },
+    fetch: async (url: string) => {
+      calls.push(url);
+      return { ok: true, status: 200, json: async () => state };
+    },
+    EventSource: class {
+      close() {}
+    },
+    setInterval: () => 0,
+    setTimeout,
+    console,
+  };
+  runInNewContext(script, sandbox);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(calls.includes("/api/state"), "页面没有读取状态");
+  assert.match(String(node("stats").innerHTML), /正在跑/, "统计区没渲染，页面停在骨架上");
 });
 
 test("the dashboard binds loopback only", () => {

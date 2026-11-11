@@ -354,9 +354,13 @@ document.body.onclick = async (event) => {
   }
 };
 
-await refresh();
-await connectStream();
-setInterval(refresh, 5000);
+// A classic script has no top-level await: the boot sequence goes in an async IIFE, or the whole block fails to parse
+// and every section stays on the skeleton.
+(async () => {
+  await refresh();
+  await connectStream();
+  setInterval(refresh, 5000);
+})();
 </script>
 </body>
 </html>
