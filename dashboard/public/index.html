@@ -307,7 +307,7 @@ $("task-form").onsubmit = async (event) => {
       : { source: f.source.value, types: f.types.value.split(",").map((s) => s.trim()).filter(Boolean) },
     to: f.to.value,
     cwd: f.cwd.value.trim(),
-    prompt: f.prompt.value.trim(),
+    ...(f.prompt.value.trim() && { prompt: f.prompt.value.trim() }),
     tell: f.tell.value,
   };
   const out = $("task-result");

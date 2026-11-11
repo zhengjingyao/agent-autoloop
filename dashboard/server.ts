@@ -28,6 +28,37 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 const isObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+/** Only the page this server served may borrow the owner's key: another site, or a DNS rebound name, must not. */
+function denied(request: Request): Response | null {
+  const host = request.headers.get("host");
+  if (!host || /[/\\?#@\s]/.test(host)) return json({ error: "只能从本机回环地址打开这个页面" }, 403);
+  let hostname: string;
+  try {
+    hostname = new URL(`http://${host}`).hostname;
+  } catch {
+    return json({ error: "只能从本机回环地址打开这个页面" }, 403);
+  }
+  const loopback =
+    hostname === "localhost" ||
+    hostname === "[::1]" ||
+    hostname === "::1" ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname);
+  if (!loopback) return json({ error: "只能从本机回环地址打开这个页面" }, 403);
+  const origin = request.headers.get("origin");
+  if (origin !== null) {
+    let same = false;
+    try {
+      same = new URL(origin).host.toLowerCase() === host.toLowerCase();
+    } catch {}
+    if (!same) return json({ error: "别的网站不能借本人的密钥操作" }, 403);
+  }
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin" && site !== "none") {
+    return json({ error: "别的网站不能借本人的密钥操作" }, 403);
+  }
+  return null;
+}
+
 /** The whole file is checked before it is written: a rejected task must leave the old rules running. */
 function addRule(given: unknown): Response {
   if (!isObject(given)) return json({ error: "新任务要是一个 JSON 对象" }, 400);
@@ -76,6 +107,8 @@ async function streamOf(request: Request, config: Config, after: string): Promis
 }
 
 async function handle(request: Request): Promise<Response> {
+  const refused = denied(request);
+  if (refused) return refused;
   const url = new URL(request.url);
   const path = url.pathname;
   if (request.method === "GET" && (path === "/" || path === "/index.html")) {
@@ -91,7 +124,21 @@ async function handle(request: Request): Promise<Response> {
   const hub = hubClient(config.url, config.owner);
   try {
     if (request.method === "GET" && path === "/api/rules.json") {
-      return json(JSON.parse(readFileSync(RULES_FILE, "utf8")));
+      // The form only picks an agent id and a source id; it has no use for command lines, program paths or keys.
+      const raw = JSON.parse(readFileSync(RULES_FILE, "utf8"));
+      const agents = Object.fromEntries(
+        Object.entries(raw.agents ?? {}).map(([id, agent]) => [
+          id,
+          { name: (agent as { name?: string }).name ?? id, use: (agent as { use?: string }).use },
+        ]),
+      );
+      const sources = Object.fromEntries(
+        Object.entries(raw.sources ?? {}).map(([id, source]) => [
+          id,
+          { name: (source as { name?: string }).name ?? id },
+        ]),
+      );
+      return json({ ...raw, agents, sources });
     }
     if (request.method === "GET" && path === "/api/state") {
       const before = url.searchParams.get("before");

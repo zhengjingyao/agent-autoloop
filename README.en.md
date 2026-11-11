@@ -16,7 +16,7 @@ Most of us use command-line agents like Claude Code or Codex by babysitting a te
 
 - **One machine, one install command.** Runs on Windows, macOS, or Linux. No cloud server or inbound ports required.
 - **Connect a new agent in one line.** No SDK, no agent source code to fork. Any CLI tool that takes a prompt and prints a final reply can plug in.
-- **No web dashboard.** Cards reach you on Feishu, DingTalk, WeCom, Slack, Discord, or desktop notifications when you are needed. Everything else is one command away.
+- The hub itself has no interface; this branch adds a local dashboard at `127.0.0.1:3351` as an owner client. Cards reach you on Feishu, DingTalk, WeCom, Slack, Discord, or desktop notifications when you are needed.
 
 ## Get started
 
@@ -111,9 +111,9 @@ Changes take effect within seconds of saving. Run `agent-autoloop check` to vali
 This branch ships a client on equal footing with the CLI: once `up` is running, open <http://127.0.0.1:3351> to see online workers, rules and their next runs, recent rounds, cards waiting on you, tokens and cost. You can pause, resume or run a rule now, answer a card, and **add a task** from a form.
 
 - Port 3351 by default; change `dashboard.port` in `config.json`, or run `agent-autoloop ui --port 3351` on its own.
-- It only reads `/v1/state` and forwards `/v1/stream`. The owner key stays on the server and never reaches the browser; the server binds loopback only.
+- It only reads `/v1/state` and forwards `/v1/stream`. The owner key stays on the server and never reaches the browser; the server binds loopback only and refuses cross-site requests or a forged Host (DNS rebinding).
 - Adding a task appends a rule to `rules.json`: the whole file is validated with the same `parseRules` as `agent-autoloop check` before an atomic write. A rejected task leaves the file byte for byte unchanged.
-- It is a separate process, so failing to start cannot take the hub down. The kernel, `host`, `protocol` and `worker` boundaries are unchanged: the hub still has no interface of its own.
+- It is a separate HTTP server inside the `up` process, so failing to start cannot take the hub down. The kernel, `host`, `protocol` and `worker` boundaries are unchanged: the hub still has no interface of its own.
 
 ### How agents talk back to the hub
 
