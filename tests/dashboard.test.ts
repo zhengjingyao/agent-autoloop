@@ -135,7 +135,8 @@ test("the page's script parses: a top-level await would leave every section stuc
   assert.doesNotThrow(() => new Script(script), "页面脚本解析失败，整页会停在骨架上");
 });
 
-test("the page boots: its script really reads state and fills the panels", async () => {
+/** Runs the page's script in a minimal DOM. The hub names its SSE frames "fact", so only addEventListener sees them. */
+function boot() {
   const script = /<script[^>]*>([\s\S]*?)<\/script>/.exec(readFileSync(PAGE, "utf8"))![1];
   const calls: string[] = [];
   const nodes = new Map<string, Record<string, unknown>>();
@@ -157,6 +158,7 @@ test("the page boots: its script really reads state and fills the panels", async
     agents: [],
     channels: [],
   };
+  const listeners = new Map<string, (() => void)[]>();
   const sandbox = {
     document: { getElementById: node, querySelectorAll: () => [], body: {} },
     window: { alert() {} },
@@ -165,6 +167,9 @@ test("the page boots: its script really reads state and fills the panels", async
       return { ok: true, status: 200, json: async () => state };
     },
     EventSource: class {
+      addEventListener(name: string, fn: () => void) {
+        listeners.set(name, [...(listeners.get(name) ?? []), fn]);
+      }
       close() {}
     },
     setInterval: () => 0,
@@ -172,9 +177,30 @@ test("the page boots: its script really reads state and fills the panels", async
     console,
   };
   runInNewContext(script, sandbox);
-  await new Promise((resolve) => setTimeout(resolve, 20));
-  assert.ok(calls.includes("/api/state"), "页面没有读取状态");
-  assert.match(String(node("stats").innerHTML), /正在跑/, "统计区没渲染，页面停在骨架上");
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+  const frame = (name: string) => {
+    for (const fn of listeners.get(name) ?? []) fn();
+  };
+  return { calls, node, settle, frame };
+}
+
+test("the page boots: its script really reads state and fills the panels", async () => {
+  const page = boot();
+  await page.settle();
+  assert.ok(page.calls.includes("/api/state"), "页面没有读取状态");
+  assert.match(String(page.node("stats").innerHTML), /正在跑/, "统计区没渲染，页面停在骨架上");
+});
+
+test("a fact frame refreshes the page: onmessage alone never sees the hub's named events", async () => {
+  const page = boot();
+  await page.settle();
+  const before = page.calls.filter((call) => call === "/api/state").length;
+  page.frame("fact");
+  await page.settle();
+  assert.ok(
+    page.calls.filter((call) => call === "/api/state").length > before,
+    "中台发来 event: fact，页面没有刷新（只写 onmessage 是不够的）",
+  );
 });
 
 test("the dashboard binds loopback only", () => {

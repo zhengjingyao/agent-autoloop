@@ -262,6 +262,8 @@ async function refresh() {
 async function connectStream() {
   source?.close();
   source = new EventSource("/api/stream?after=" + seq);
+  // The hub names every frame "event: fact": onmessage only fires for frames with no event field.
+  source.addEventListener("fact", () => { refresh(); });
   source.onmessage = () => { refresh(); };
   source.onerror = () => { $("live").innerHTML = `<span class="dot off"></span>实时断开，改用定时刷新`; };
 }
