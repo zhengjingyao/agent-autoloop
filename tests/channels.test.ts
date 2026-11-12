@@ -8,6 +8,7 @@
 // A slow CLI call must not block the hub's HTTP loop while looking up a user, sending or updating a card.
 // An ask card that only takes choices loses the account someone would type; words without a choice must still answer.
 // A U+2028 or U+2029 in what someone typed, which JSON leaves as it is, cuts the click's line and loses the click.
+// Older lark-cli releases reject `--content -`, so a first card must not depend on that stdin convention.
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -142,6 +143,52 @@ test("feishu: a lark-cli that can't be started is said, not left to take the hub
   assert.match(lines[0] ?? "", /ENOENT/);
 });
 
+test("feishu: a first card works without lark-cli's stdin content convention", async () => {
+  const lark = join(dir, "lark-cli-no-stdin-content");
+  writeFileSync(
+    lark,
+    `#!/bin/sh
+case "$*" in
+  *"event consume"*) exec sleep 30 ;;
+  *"+messages-send"*)
+    previous=
+    content=
+    for argument do
+      if [ "$previous" = "--content" ]; then content=$argument; break; fi
+      previous=$argument
+    done
+    case "$content" in
+      \{*) echo '{"ok":true,"data":{"message_id":"om_5"}}' ;;
+      *) exit 1 ;;
+    esac ;;
+esac
+`,
+    { mode: 0o755 },
+  );
+  const stop = new AbortController();
+  const cards: (Card | null)[] = [base];
+  const delivered: unknown[][] = [];
+  const failed: unknown[][] = [];
+  const hub = {
+    async nextCard() {
+      if (cards.length) return { card: cards.shift()! };
+      stop.abort();
+      return { card: null };
+    },
+    async delivered(...args: unknown[]) {
+      delivered.push(args);
+      return {};
+    },
+    async failed(...args: unknown[]) {
+      failed.push(args);
+      return {};
+    },
+  };
+  await feishu({ hub: hub as any, options: { user: "ou_me", lark }, log: () => {}, signal: stop.signal });
+  assert.deepEqual(failed, []);
+  assert.deepEqual(delivered, [[5, 1, "om_5"]]);
+});
+
 test("feishu: sends once per card, updates in place, reports failure, and only real clicks count", async () => {
   const log = join(dir, "lark.log");
   const lark = join(dir, "lark-cli");
@@ -193,7 +240,7 @@ esac
     lark,
     readFileSync(lark, "utf8").replace(
       "*fail-me*) exit 1 ;;",
-      '*+messages-send*) body=$(cat); case "$body" in *fail-me*) exit 1 ;; esac; echo \'{"ok":true,"data":{"message_id":"om_5"}}\' ;;',
+      '*+messages-send*) case "$*" in *fail-me*) exit 1 ;; esac; echo \'{"ok":true,"data":{"message_id":"om_5"}}\' ;;',
     ),
   );
   await feishu({ hub: hub as any, options: { user: "ou_me", lark }, log: () => {}, signal: stop.signal });

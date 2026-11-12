@@ -40,6 +40,7 @@ const HELP = `Agent 自动化中台
                                     在测试中台上检查协议
   agent-autoloop status [--json]         现在什么情况：谁在线、等你什么、在做什么、做过什么、花了多少
                                      --json 输出 /v1/state 的原始结构，给脚本用
+  agent-autoloop ui [--port 3351]       打开本地可视化页面；随 up 自动启动，也可以单独跑
   agent-autoloop runs [规则] [--before <第几轮>] [--json]
                                     列出做完的轮次，可以只看一条规则、往前翻；细节再用 why
   agent-autoloop answer <卡片> [序号] [--text 别的想法]
@@ -170,6 +171,7 @@ rules.json 里这个定时任务要写 cwd；你答了，中台叫醒它的 Agen
   stop: { flags: [], usage: "用法：agent-autoloop stop <第几轮>" },
   tell: { flags: ["task"], usage: "用法：agent-autoloop tell <编号> [--task 定时任务名]，内容从标准输入读" },
   try: { flags: [], usage: TRY_USAGE },
+  ui: { flags: ["port"], usage: "用法：agent-autoloop ui [--port 3351]" },
   uninstall: { flags: ["yes"], usage: UNINSTALL_USAGE },
   up: { flags: [], usage: "用法：agent-autoloop up" },
   update: { flags: [], usage: UPDATE_USAGE },
@@ -910,6 +912,7 @@ const commands: Record<string, () => unknown> = {
   up: async () => (await import("../host/up.ts")).up(),
   try: () => tryIt(),
   status: () => status(flags(args).named),
+  ui: async () => (await import("../dashboard/server.ts")).dashboardCommand(args),
   why: () => why(args),
   runs: () => runs(args),
   conformance: () => checkConformance(args),

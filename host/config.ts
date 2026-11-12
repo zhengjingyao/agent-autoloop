@@ -13,6 +13,7 @@ export type Config = {
   channels?: Record<string, ChannelConfig>;
   source?: { name: string; key: string };
   owner?: string;
+  dashboard?: { port?: number };
 };
 
 export const CONFIG_FILE = path.join(HOME, "config.json");

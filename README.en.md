@@ -16,7 +16,7 @@ Most of us use command-line agents like Claude Code or Codex by babysitting a te
 
 - **One machine, one install command.** Runs on Windows, macOS, or Linux. No cloud server or inbound ports required.
 - **Connect a new agent in one line.** No SDK, no agent source code to fork. Any CLI tool that takes a prompt and prints a final reply can plug in.
-- **No web dashboard.** Cards reach you on Feishu, DingTalk, WeCom, Slack, Discord, or desktop notifications when you are needed. Everything else is one command away.
+- The hub itself has no interface; this branch adds a local dashboard at `127.0.0.1:3351` as an owner client. Cards reach you on Feishu, DingTalk, WeCom, Slack, Discord, or desktop notifications when you are needed.
 
 ## Get started
 
@@ -105,6 +105,15 @@ External events work the same way once the source is connected. To hand new GitH
 `agent-autoloop pause <rule>` and `resume <rule>` pause and resume one rule: while paused it skips its scheduled times and doesn't take or queue events, and a resume doesn't catch up on its own. A resume lists the events the pause skipped and prints `agent-autoloop replay <rule> --since <time>`, which hands them all to the rule at once, each only once. `agent-autoloop run <rule>` runs it once now. These are kept in the hub's log; `rules.json` is not changed. `agent-autoloop runs [rule]` lists finished rounds, `--before <round>` pages back, and `agent-autoloop why <round>` tells the full story of one.
 
 Changes take effect within seconds of saving. Run `agent-autoloop check` to validate, `agent-autoloop check <file>` to validate a draft without touching the running hub, `agent-autoloop rules explain [file]` to see the rules in effect and their next runs (a draft file too), and `agent-autoloop emit <type> --dry-run` to preview who an event would go to (it doesn't contact the hub or write to the log). If you make a mistake, or the file is deleted or can't be read, the hub keeps running the previous valid rules and sends you a card about it.
+
+### Local dashboard (this branch)
+
+This branch ships a client on equal footing with the CLI: once `up` is running, open <http://127.0.0.1:3351> to see online workers, rules and their next runs, recent rounds, cards waiting on you, tokens and cost. You can pause, resume or run a rule now, answer a card, and **add a task** from a form.
+
+- Port 3351 by default; change `dashboard.port` in `config.json`, or run `agent-autoloop ui --port 3351` on its own.
+- It only reads `/v1/state` and forwards `/v1/stream`. The owner key stays on the server and never reaches the browser; the server binds loopback only and refuses cross-site requests or a forged Host (DNS rebinding).
+- Adding a task appends a rule to `rules.json`: the whole file is validated with the same `parseRules` as `agent-autoloop check` before an atomic write. A rejected task leaves the file byte for byte unchanged.
+- It is a separate HTTP server inside the `up` process, so failing to start cannot take the hub down. The kernel, `host`, `protocol` and `worker` boundaries are unchanged: the hub still has no interface of its own.
 
 ### How agents talk back to the hub
 

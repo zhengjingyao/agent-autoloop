@@ -73,6 +73,7 @@ export async function up() {
   const stop = new AbortController();
   const jobs: Promise<unknown>[] = [];
   let close = () => {};
+  let closeDashboard = () => {};
   if (config.hub) {
     loadSecrets();
     const { host, port } = parseListen(config.hub.listen);
@@ -93,6 +94,17 @@ export async function up() {
       server.closeAllConnections();
     };
   }
+  // The page is a client of the hub, not part of it: a port clash or a bad rule file must not take the hub down.
+  if (config.owner) {
+    try {
+      const { serveDashboard } = await import("../dashboard/server.ts");
+      const dashboard = await serveDashboard({ port: config.dashboard?.port });
+      log("dashboard")(`页面在 ${dashboard.url}`);
+      closeDashboard = () => void dashboard.close();
+    } catch (error) {
+      log("dashboard")(`页面没起来：${(error as Error).message}`);
+    }
+  }
   if (config.worker) {
     const { key, name, capacity, unreachable } = config.worker;
     const say = log("worker");
@@ -105,6 +117,7 @@ export async function up() {
   const finish = () => {
     stop.abort();
     close();
+    closeDashboard();
     unlock();
     process.exit(0);
   };

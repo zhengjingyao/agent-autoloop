@@ -13,7 +13,7 @@ description: 配置 Agent 自动化中台：加规则、接新的事件插件、
 
 续接会话也只算这次新增的用量。`~/.agent-autoloop/worker/usage/` 存着相减要用的累计值，没有记录的续接（比如删了这个目录）这次不报 Codex 的 Token 和 Claude Code 的费用，下一次恢复正常。本人打开链接在同一个会话里接着聊用掉的量，会算进下一次续接。旧回执不重算。
 
-这里没有网页。用户想要一个页面看全局，就替他写一个：读 `GET /v1/state`，密钥是 `config.json` 的 `owner`，要跟着变化就从状态里的 `seq` 接 `GET /v1/stream?after=<seq>`，请求见 `docs/protocol.md` 的「本人」一节。
+中台自己没有网页；本分支自带一个本地页面，随 `up` 起在 3351 端口（或单独运行 `agent-autoloop ui`），用户想看全局就让他打开那个地址，页面上也能新增任务。要另写一个客户端时：读 `GET /v1/state`，密钥是 `config.json` 的 `owner`，要跟着变化就从状态里的 `seq` 接 `GET /v1/stream?after=<seq>`，请求见 `docs/protocol.md` 的「本人」一节。
 
 ## 改规则
 
@@ -158,6 +158,8 @@ gh api repos/owner/app/statuses/<完整提交编号> -f context=delivery-agent/<
 只认 `trusted` 里的 GitHub 账号写的状态，填账号的数字 ID（`gh api user --jq .id`）。声明跟着提交走：再推提交要重新声明，没声明就走默认审查；同步 main 产生的干净合并沿用原来的声明。要撤回，在同一个提交上再写一条 `state=failure` 的同名状态。PR 说明、标签和分支名都不算声明。
 
 `check.job` 写 job 的名字；矩阵 job（名字像 `check (ubuntu-latest)`）算同一个 job，每一项都要成功。检查工作流的触发类型要带 `ready_for_review`：草稿转 ready 后，只接受这之后新跑的一次检查，而 `pull_request` 默认不在转 ready 时触发。写成 `on: { pull_request: { types: [opened, synchronize, reopened, ready_for_review] } }`。
+
+当前提交最新的 `pull_request` 检查排队超过 10 分钟、一个任务都没创建时，插件会把 PR 转草稿再转正式，重新触发一次，只认可转回正式之后的新检查。同一个提交的自救记录随中台复查保留。新检查超过 10 分钟仍无任务时，交付立即退回，说明 GitHub 收下了检查却一直没有开始，等 GitHub 恢复后重新交付。已有任务在排队等机器时继续等待。其他情况仍最多等待 30 分钟，暂时的 GitHub 或执行错误按原有规则重试。手动触发的 `workflow_dispatch` 检查不作为合并依据。
 
 规则示例（把绝对路径、接单电脑和仓库改成自己的）：
 
